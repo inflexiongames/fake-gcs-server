@@ -732,7 +732,15 @@ func (s *Server) rewriteObject(r *http.Request) jsonResponse {
 
 func (s *Server) downloadObject(w http.ResponseWriter, r *http.Request) {
 	vars := unescapeMuxVars(mux.Vars(r))
-	obj, err := s.objectWithGenerationOnValidGeneration(vars["bucketName"], vars["objectName"], r.FormValue("generation"))
+
+	generation := r.FormValue("generation")
+
+	// Additionally handle if-generation-match coming from headers, which cloud.google.com/go/storage sends on a read.
+	if generation == "" {
+		generation = r.Header.Get("x-goog-if-generation-match")
+	}
+
+	obj, err := s.objectWithGenerationOnValidGeneration(vars["bucketName"], vars["objectName"], generation)
 	// Calling Close before checking err is okay on objects, and the object
 	// may need to be closed whether or not there's an error.
 	defer obj.Close() //lint:ignore SA5001 // see above
