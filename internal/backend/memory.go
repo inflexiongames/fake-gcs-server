@@ -251,12 +251,12 @@ func (s *storageMemory) ListObjects(bucketName string, prefix string, versions b
 	return append(objAttrs, archvObjs...), nil
 }
 
-func (s *storageMemory) GetObject(bucketName, objectName string) (StreamingObject, error) {
-	return s.GetObjectWithGeneration(bucketName, objectName, 0)
+func (s *storageMemory) GetObject(bucketName, objectName string, conditions Conditions) (StreamingObject, error) {
+	return s.GetObjectWithGeneration(bucketName, objectName, 0, conditions)
 }
 
 // GetObjectWithGeneration retrieves a specific version of the object.
-func (s *storageMemory) GetObjectWithGeneration(bucketName, objectName string, generation int64) (StreamingObject, error) {
+func (s *storageMemory) GetObjectWithGeneration(bucketName, objectName string, generation int64, conditions Conditions) (StreamingObject, error) {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 	bucketInMemory, err := s.getBucketInMemory(bucketName)
@@ -276,11 +276,16 @@ func (s *storageMemory) GetObjectWithGeneration(bucketName, objectName string, g
 		return obj.StreamingObject(), errors.New("object not found")
 	}
 
-	return listToConsider[index].StreamingObject(), nil
+	streamingObj := listToConsider[index].StreamingObject()
+	if !conditions.ConditionsMet(streamingObj.Generation) {
+		return StreamingObject{}, PreConditionFailed
+	}
+
+	return streamingObj, nil
 }
 
 func (s *storageMemory) DeleteObject(bucketName, objectName string) error {
-	obj, err := s.GetObject(bucketName, objectName)
+	obj, err := s.GetObject(bucketName, objectName, NoConditions{})
 	if err != nil {
 		return err
 	}
@@ -300,7 +305,7 @@ func (s *storageMemory) DeleteObject(bucketName, objectName string) error {
 }
 
 func (s *storageMemory) PatchObject(bucketName, objectName string, attrsToUpdate ObjectAttrs) (StreamingObject, error) {
-	obj, err := s.GetObject(bucketName, objectName)
+	obj, err := s.GetObject(bucketName, objectName, NoConditions{}) // should take and pass through conditions?
 	if err != nil {
 		return StreamingObject{}, err
 	}
@@ -312,7 +317,7 @@ func (s *storageMemory) PatchObject(bucketName, objectName string, attrsToUpdate
 
 // UpdateObject replaces an object metadata, custom time, and acl.
 func (s *storageMemory) UpdateObject(bucketName, objectName string, attrsToUpdate ObjectAttrs) (StreamingObject, error) {
-	obj, err := s.GetObject(bucketName, objectName)
+	obj, err := s.GetObject(bucketName, objectName, NoConditions{}) // should take and pass through conditions?
 	if err != nil {
 		return StreamingObject{}, err
 	}
@@ -328,7 +333,7 @@ func (s *storageMemory) UpdateObject(bucketName, objectName string, attrsToUpdat
 func (s *storageMemory) ComposeObject(bucketName string, objectNames []string, destinationName string, metadata map[string]string, contentType string) (StreamingObject, error) {
 	var data []byte
 	for _, n := range objectNames {
-		obj, err := s.GetObject(bucketName, n)
+		obj, err := s.GetObject(bucketName, n, NoConditions{}) // should take and pass through conditions?
 		if err != nil {
 			return StreamingObject{}, err
 		}
@@ -340,7 +345,7 @@ func (s *storageMemory) ComposeObject(bucketName string, objectNames []string, d
 	}
 
 	var dest Object
-	streamingDest, err := s.GetObject(bucketName, destinationName)
+	streamingDest, err := s.GetObject(bucketName, destinationName, NoConditions{})
 	if err != nil {
 		dest = Object{
 			ObjectAttrs: ObjectAttrs{

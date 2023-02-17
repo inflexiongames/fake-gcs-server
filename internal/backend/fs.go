@@ -258,16 +258,23 @@ func (s *storageFS) ListObjects(bucketName string, prefix string, versions bool)
 }
 
 // GetObject get an object by bucket and name.
-func (s *storageFS) GetObject(bucketName, objectName string) (StreamingObject, error) {
+func (s *storageFS) GetObject(bucketName, objectName string, conditions Conditions) (StreamingObject, error) {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
-	return s.getObject(bucketName, objectName)
+	obj, err := s.getObject(bucketName, objectName)
+	if err != nil {
+		return obj, err
+	}
+	if !conditions.ConditionsMet(obj.Generation) {
+		return StreamingObject{}, PreConditionFailed
+	}
+	return obj, nil
 }
 
 // GetObjectWithGeneration retrieves an specific version of the object. Not
 // implemented for this backend.
-func (s *storageFS) GetObjectWithGeneration(bucketName, objectName string, generation int64) (StreamingObject, error) {
-	obj, err := s.GetObject(bucketName, objectName)
+func (s *storageFS) GetObjectWithGeneration(bucketName, objectName string, generation int64, conditions Conditions) (StreamingObject, error) {
+	obj, err := s.GetObject(bucketName, objectName, conditions)
 	if err != nil {
 		return obj, err
 	}
@@ -325,7 +332,7 @@ func (s *storageFS) DeleteObject(bucketName, objectName string) error {
 }
 
 func (s *storageFS) PatchObject(bucketName, objectName string, attrsToUpdate ObjectAttrs) (StreamingObject, error) {
-	obj, err := s.GetObject(bucketName, objectName)
+	obj, err := s.GetObject(bucketName, objectName, NoConditions{}) // should take and pass through conditions?
 	if err != nil {
 		return StreamingObject{}, err
 	}
@@ -337,7 +344,7 @@ func (s *storageFS) PatchObject(bucketName, objectName string, attrsToUpdate Obj
 }
 
 func (s *storageFS) UpdateObject(bucketName, objectName string, attrsToUpdate ObjectAttrs) (StreamingObject, error) {
-	obj, err := s.GetObject(bucketName, objectName)
+	obj, err := s.GetObject(bucketName, objectName, NoConditions{}) // should take and pass through conditions
 	if err != nil {
 		return StreamingObject{}, err
 	}
@@ -374,7 +381,7 @@ func concatObjectReaders(objects []StreamingObject) io.ReadSeekCloser {
 func (s *storageFS) ComposeObject(bucketName string, objectNames []string, destinationName string, metadata map[string]string, contentType string) (StreamingObject, error) {
 	var sourceObjects []StreamingObject
 	for _, n := range objectNames {
-		obj, err := s.GetObject(bucketName, n)
+		obj, err := s.GetObject(bucketName, n, NoConditions{})
 		if err != nil {
 			return StreamingObject{}, err
 		}

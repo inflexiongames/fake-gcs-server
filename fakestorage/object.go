@@ -280,7 +280,7 @@ func (s *Server) CreateObjectStreaming(obj StreamingObject) error {
 }
 
 func (s *Server) createObject(obj StreamingObject, conditions backend.Conditions) (StreamingObject, error) {
-	oldBackendObj, err := s.backend.GetObject(obj.BucketName, obj.Name)
+	oldBackendObj, err := s.backend.GetObject(obj.BucketName, obj.Name, backend.NoConditions{}) // NoCond here?
 	// Calling Close before checking err is okay on objects, and the object
 	// may need to be closed whether or not there's an error.
 	defer oldBackendObj.Close() //lint:ignore SA5001 // see above
@@ -498,8 +498,8 @@ func convertTimeWithoutError(t string) time.Time {
 }
 
 // GetObject is the non-streaming version of GetObjectStreaming.
-func (s *Server) GetObject(bucketName, objectName string) (Object, error) {
-	streamingObject, err := s.GetObjectStreaming(bucketName, objectName)
+func (s *Server) GetObject(bucketName, objectName string, conditions backend.Conditions) (Object, error) {
+	streamingObject, err := s.GetObjectStreaming(bucketName, objectName, conditions)
 	if err != nil {
 		return Object{}, err
 	}
@@ -508,8 +508,8 @@ func (s *Server) GetObject(bucketName, objectName string) (Object, error) {
 
 // GetObjectStreaming returns the object with the given name in the given
 // bucket, or an error if the object doesn't exist.
-func (s *Server) GetObjectStreaming(bucketName, objectName string) (StreamingObject, error) {
-	backendObj, err := s.backend.GetObject(bucketName, objectName)
+func (s *Server) GetObjectStreaming(bucketName, objectName string, conditions backend.Conditions) (StreamingObject, error) {
+	backendObj, err := s.backend.GetObject(bucketName, objectName, conditions)
 	if err != nil {
 		return StreamingObject{}, err
 	}
@@ -519,8 +519,8 @@ func (s *Server) GetObjectStreaming(bucketName, objectName string) (StreamingObj
 
 // GetObjectWithGeneration is the non-streaming version of
 // GetObjectWithGenerationStreaming.
-func (s *Server) GetObjectWithGeneration(bucketName, objectName string, generation int64) (Object, error) {
-	streamingObject, err := s.GetObjectWithGenerationStreaming(bucketName, objectName, generation)
+func (s *Server) GetObjectWithGeneration(bucketName, objectName string, generation int64, conditions backend.Conditions) (Object, error) {
+	streamingObject, err := s.GetObjectWithGenerationStreaming(bucketName, objectName, generation, conditions)
 	if err != nil {
 		return Object{}, err
 	}
@@ -532,8 +532,8 @@ func (s *Server) GetObjectWithGeneration(bucketName, objectName string, generati
 // exist.
 //
 // If versioning is enabled, archived versions are considered.
-func (s *Server) GetObjectWithGenerationStreaming(bucketName, objectName string, generation int64) (StreamingObject, error) {
-	backendObj, err := s.backend.GetObjectWithGeneration(bucketName, objectName, generation)
+func (s *Server) GetObjectWithGenerationStreaming(bucketName, objectName string, generation int64, conditions backend.Conditions) (StreamingObject, error) {
+	backendObj, err := s.backend.GetObjectWithGeneration(bucketName, objectName, generation, conditions)
 	if err != nil {
 		return StreamingObject{}, err
 	}
@@ -541,14 +541,14 @@ func (s *Server) GetObjectWithGenerationStreaming(bucketName, objectName string,
 	return obj, nil
 }
 
-func (s *Server) objectWithGenerationOnValidGeneration(bucketName, objectName, generationStr string) (StreamingObject, error) {
+func (s *Server) objectWithGenerationOnValidGeneration(bucketName, objectName, generationStr string, conditions backend.Conditions) (StreamingObject, error) {
 	generation, err := strconv.ParseInt(generationStr, 10, 64)
 	if err != nil && generationStr != "" {
 		return StreamingObject{}, errInvalidGeneration
 	} else if generation > 0 {
-		return s.GetObjectWithGenerationStreaming(bucketName, objectName, generation)
+		return s.GetObjectWithGenerationStreaming(bucketName, objectName, generation, conditions)
 	}
-	return s.GetObjectStreaming(bucketName, objectName)
+	return s.GetObjectStreaming(bucketName, objectName, conditions)
 }
 
 func (s *Server) listObjects(r *http.Request) jsonResponse {
@@ -576,7 +576,15 @@ func (s *Server) getObject(w http.ResponseWriter, r *http.Request) {
 	handler := jsonToHTTPHandler(func(r *http.Request) jsonResponse {
 		vars := unescapeMuxVars(mux.Vars(r))
 
-		obj, err := s.objectWithGenerationOnValidGeneration(vars["bucketName"], vars["objectName"], r.FormValue("generation"))
+		conditions, err := s.extractPreconditions(r)
+		if err != nil {
+			return jsonResponse{
+				status:       http.StatusBadRequest,
+				errorMessage: err.Error(),
+			}
+		}
+
+		obj, err := s.objectWithGenerationOnValidGeneration(vars["bucketName"], vars["objectName"], r.FormValue("generation"), conditions)
 		// Calling Close before checking err is okay on objects, and the object
 		// may need to be closed whether or not there's an error.
 		defer obj.Close() //lint:ignore SA5001 // see above
@@ -585,6 +593,9 @@ func (s *Server) getObject(w http.ResponseWriter, r *http.Request) {
 			var errMessage string
 			if errors.Is(err, errInvalidGeneration) {
 				statusCode = http.StatusBadRequest
+				errMessage = err.Error()
+			} else if errors.Is(err, backend.PreConditionFailed) {
+				statusCode = http.StatusPreconditionFailed
 				errMessage = err.Error()
 			}
 			return jsonResponse{
@@ -605,7 +616,7 @@ func (s *Server) getObject(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) deleteObject(r *http.Request) jsonResponse {
 	vars := unescapeMuxVars(mux.Vars(r))
-	obj, err := s.GetObjectStreaming(vars["bucketName"], vars["objectName"])
+	obj, err := s.GetObjectStreaming(vars["bucketName"], vars["objectName"], backend.NoConditions{})
 	// Calling Close before checking err is okay on objects, and the object
 	// may need to be closed whether or not there's an error.
 	defer obj.Close() //lint:ignore SA5001 // see above
@@ -628,7 +639,7 @@ func (s *Server) deleteObject(r *http.Request) jsonResponse {
 func (s *Server) listObjectACL(r *http.Request) jsonResponse {
 	vars := unescapeMuxVars(mux.Vars(r))
 
-	obj, err := s.GetObjectStreaming(vars["bucketName"], vars["objectName"])
+	obj, err := s.GetObjectStreaming(vars["bucketName"], vars["objectName"], backend.NoConditions{})
 	if err != nil {
 		return jsonResponse{status: http.StatusNotFound}
 	}
@@ -640,7 +651,7 @@ func (s *Server) listObjectACL(r *http.Request) jsonResponse {
 func (s *Server) setObjectACL(r *http.Request) jsonResponse {
 	vars := unescapeMuxVars(mux.Vars(r))
 
-	obj, err := s.GetObjectStreaming(vars["bucketName"], vars["objectName"])
+	obj, err := s.GetObjectStreaming(vars["bucketName"], vars["objectName"], backend.NoConditions{})
 	if err != nil {
 		return jsonResponse{status: http.StatusNotFound}
 	}
@@ -677,7 +688,7 @@ func (s *Server) setObjectACL(r *http.Request) jsonResponse {
 
 func (s *Server) rewriteObject(r *http.Request) jsonResponse {
 	vars := unescapeMuxVars(mux.Vars(r))
-	obj, err := s.objectWithGenerationOnValidGeneration(vars["sourceBucket"], vars["sourceObject"], r.FormValue("sourceGeneration"))
+	obj, err := s.objectWithGenerationOnValidGeneration(vars["sourceBucket"], vars["sourceObject"], r.FormValue("sourceGeneration"), backend.NoConditions{})
 	// Calling Close before checking err is okay on objects, and the object
 	// may need to be closed whether or not there's an error.
 	defer obj.Close() //lint:ignore SA5001 // see above
@@ -733,14 +744,15 @@ func (s *Server) rewriteObject(r *http.Request) jsonResponse {
 func (s *Server) downloadObject(w http.ResponseWriter, r *http.Request) {
 	vars := unescapeMuxVars(mux.Vars(r))
 
-	generation := r.FormValue("generation")
-
-	// Additionally handle if-generation-match coming from headers, which cloud.google.com/go/storage sends on a read.
-	if generation == "" {
-		generation = r.Header.Get("x-goog-if-generation-match")
+	// TODO: push down into objectWithGenerationOnValidGeneration?
+	conditions, err := s.extractPreconditions(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
 
-	obj, err := s.objectWithGenerationOnValidGeneration(vars["bucketName"], vars["objectName"], generation)
+	generation := r.FormValue("generation")
+
+	obj, err := s.objectWithGenerationOnValidGeneration(vars["bucketName"], vars["objectName"], generation, conditions)
 	// Calling Close before checking err is okay on objects, and the object
 	// may need to be closed whether or not there's an error.
 	defer obj.Close() //lint:ignore SA5001 // see above
@@ -749,6 +761,9 @@ func (s *Server) downloadObject(w http.ResponseWriter, r *http.Request) {
 		message := http.StatusText(statusCode)
 		if errors.Is(err, errInvalidGeneration) {
 			statusCode = http.StatusBadRequest
+			message = err.Error()
+		} else if errors.Is(err, backend.PreConditionFailed) {
+			statusCode = http.StatusPreconditionFailed
 			message = err.Error()
 		}
 		http.Error(w, message, statusCode)

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/fsouza/fake-gcs-server/internal/backend"
 	"github.com/fsouza/fake-gcs-server/internal/checksum"
 	"google.golang.org/api/iterator"
 )
@@ -1270,7 +1271,7 @@ func TestServiceClientRewriteObject(t *testing.T) {
 				if attrs.Generation == 0 {
 					t.Errorf("Generation was zero, expected non-zero")
 				}
-				obj, err := server.GetObject(test.bucketName, test.objectName)
+				obj, err := server.GetObject(test.bucketName, test.objectName, backend.NoConditions{})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -1405,7 +1406,7 @@ func TestServiceClientRewriteObjectWithGenerations(t *testing.T) {
 				if attrs.Generation == 0 {
 					t.Errorf("Generation was zero, expected non-zero")
 				}
-				obj, err := server.GetObject(test.bucketName, test.objectName)
+				obj, err := server.GetObject(test.bucketName, test.objectName, backend.NoConditions{})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -1443,7 +1444,7 @@ func TestServerClientObjectDelete(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		obj, err := server.GetObject(bucketName, objectName)
+		obj, err := server.GetObject(bucketName, objectName, backend.NoConditions{})
 		if err == nil {
 			t.Fatalf("unexpected success. obj: %#v", obj)
 		}
@@ -1463,11 +1464,11 @@ func TestServerClientObjectDeleteWithVersioning(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		objAfterDelete, err := server.GetObject(obj.BucketName, obj.Name)
+		objAfterDelete, err := server.GetObject(obj.BucketName, obj.Name, backend.NoConditions{})
 		if err == nil {
 			t.Fatalf("unexpected success. obj: %#v", objAfterDelete)
 		}
-		objWithGen, err := server.GetObjectWithGeneration(obj.BucketName, obj.Name, obj.Generation)
+		objWithGen, err := server.GetObjectWithGeneration(obj.BucketName, obj.Name, obj.Generation, backend.NoConditions{})
 		if err != nil {
 			t.Fatalf("unable to retrieve archived object. err: %v", err)
 		}
@@ -1896,7 +1897,7 @@ func TestServiceClientComposeObject(t *testing.T) {
 				if !bytes.Equal(attrs.MD5, expectedHash) {
 					t.Errorf("wrong hash returned\nwant %d\ngot   %d", hash, attrs.MD5)
 				}
-				obj, err := server.GetObject(test.bucketName, test.destObjectName)
+				obj, err := server.GetObject(test.bucketName, test.destObjectName, backend.NoConditions{})
 				if err != nil {
 					t.Fatal(err)
 				}

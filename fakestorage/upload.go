@@ -179,12 +179,16 @@ func (s *Server) insertFormObject(r *http.Request) xmlResponse {
 	return xmlResponse{status: successActionStatus}
 }
 
-func (s *Server) wrapUploadPreconditions(r *http.Request, bucketName string, objectName string) (generationCondition, error) {
+func (s *Server) extractPreconditions(r *http.Request) (generationCondition, error) {
 	result := generationCondition{
 		ifGenerationMatch:    nil,
 		ifGenerationNotMatch: nil,
 	}
+
 	ifGenerationMatch := r.URL.Query().Get("ifGenerationMatch")
+	if ifGenerationMatch == "" {
+		ifGenerationMatch = r.Header.Get("x-goog-if-generation-match")
+	}
 
 	if ifGenerationMatch != "" {
 		gen, err := strconv.ParseInt(ifGenerationMatch, 10, 64)
@@ -346,7 +350,7 @@ func (s *Server) multipartUpload(bucketName string, r *http.Request) jsonRespons
 		objName = metadata.Name
 	}
 
-	conditions, err := s.wrapUploadPreconditions(r, bucketName, objName)
+	conditions, err := s.extractPreconditions(r)
 	if err != nil {
 		return jsonResponse{
 			status:       http.StatusBadRequest,

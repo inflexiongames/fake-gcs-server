@@ -24,8 +24,8 @@ type Storage interface {
 	DeleteBucket(name string) error
 	CreateObject(obj StreamingObject, conditions Conditions) (StreamingObject, error)
 	ListObjects(bucketName string, prefix string, versions bool) ([]ObjectAttrs, error)
-	GetObject(bucketName, objectName string) (StreamingObject, error)
-	GetObjectWithGeneration(bucketName, objectName string, generation int64) (StreamingObject, error)
+	GetObject(bucketName, objectName string, conditions Conditions) (StreamingObject, error)
+	GetObjectWithGeneration(bucketName, objectName string, generation int64, conditions Conditions) (StreamingObject, error)
 	DeleteObject(bucketName, objectName string) error
 	PatchObject(bucketName, objectName string, attrsToUpdate ObjectAttrs) (StreamingObject, error)
 	UpdateObject(bucketName, objectName string, attrsToUpdate ObjectAttrs) (StreamingObject, error)

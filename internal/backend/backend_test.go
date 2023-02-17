@@ -85,7 +85,7 @@ func uploadAndCompare(t *testing.T, storage Storage, obj Object) int64 {
 	}
 	noError(t, err)
 	newObject.Close()
-	activeObj, err := storage.GetObject(obj.BucketName, obj.Name)
+	activeObj, err := storage.GetObject(obj.BucketName, obj.Name, NoConditions{})
 	noError(t, err)
 	if activeObj.Generation == 0 {
 		t.Errorf("generation is empty, but we expect a unique int")
@@ -94,7 +94,7 @@ func uploadAndCompare(t *testing.T, storage Storage, obj Object) int64 {
 		t.Errorf("object retrieved differs from the created one. Descr: %v", err)
 	}
 	activeObj.Close()
-	objFromGeneration, err := storage.GetObjectWithGeneration(obj.BucketName, obj.Name, activeObj.Generation)
+	objFromGeneration, err := storage.GetObjectWithGeneration(obj.BucketName, obj.Name, activeObj.Generation, NoConditions{})
 	noError(t, err)
 	if err := compareStreamingObjects(objFromGeneration, obj.StreamingObject()); err != nil {
 		t.Errorf("object retrieved differs from the created one. Descr: %v", err)
@@ -120,7 +120,7 @@ func TestObjectCRUD(t *testing.T) {
 		versioningEnabled := versioningEnabled
 		testForStorageBackends(t, func(t *testing.T, storage Storage) {
 			// Get in non-existent case
-			_, err := storage.GetObject(bucketName, objectName)
+			_, err := storage.GetObject(bucketName, objectName, NoConditions{})
 			shouldError(t, err)
 			// Delete in non-existent case
 			err = storage.DeleteObject(bucketName, objectName)
@@ -157,7 +157,7 @@ func TestObjectCRUD(t *testing.T) {
 			}
 			uploadAndCompare(t, storage, secondVersionWithGeneration)
 
-			initialObjectFromGeneration, err := storage.GetObjectWithGeneration(initialObject.BucketName, initialObject.Name, initialGeneration)
+			initialObjectFromGeneration, err := storage.GetObjectWithGeneration(initialObject.BucketName, initialObject.Name, initialGeneration, NoConditions{})
 			if !versioningEnabled {
 				shouldError(t, err)
 			} else {
@@ -190,10 +190,10 @@ func TestObjectCRUD(t *testing.T) {
 			err = storage.DeleteObject(bucketName, objectName)
 			noError(t, err)
 
-			_, err = storage.GetObject(bucketName, objectName)
+			_, err = storage.GetObject(bucketName, objectName, NoConditions{})
 			shouldError(t, err)
 
-			retrievedObject, err := storage.GetObjectWithGeneration(secondVersionWithGeneration.BucketName, secondVersionWithGeneration.Name, secondVersionWithGeneration.Generation)
+			retrievedObject, err := storage.GetObjectWithGeneration(secondVersionWithGeneration.BucketName, secondVersionWithGeneration.Name, secondVersionWithGeneration.Generation, NoConditions{})
 			if !versioningEnabled {
 				shouldError(t, err)
 				return
@@ -227,7 +227,7 @@ func TestObjectQueryErrors(t *testing.T) {
 			obj, err := storage.CreateObject(validObject.StreamingObject(), NoConditions{})
 			noError(t, err)
 			obj.Close()
-			_, err = storage.GetObjectWithGeneration(validObject.BucketName, validObject.Name, 33333)
+			_, err = storage.GetObjectWithGeneration(validObject.BucketName, validObject.Name, 33333, NoConditions{})
 			shouldError(t, err)
 		})
 	}

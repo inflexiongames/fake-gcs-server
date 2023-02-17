@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/fsouza/fake-gcs-server/internal/backend"
 	"github.com/fsouza/fake-gcs-server/internal/checksum"
 	"google.golang.org/api/googleapi"
 )
@@ -87,7 +88,7 @@ func TestServerClientObjectWriter(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				obj, err := server.GetObject(test.bucketName, test.objectName)
+				obj, err := server.GetObject(test.bucketName, test.objectName, backend.NoConditions{})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -169,7 +170,7 @@ func TestServerClientObjectWriterOverwrite(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		obj, err := server.GetObject("some-bucket", "some-object.txt")
+		obj, err := server.GetObject("some-bucket", "some-object.txt", backend.NoConditions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -508,7 +509,7 @@ func TestServerClientSimpleUpload(t *testing.T) {
 		t.Errorf("wrong status code\nwant %d\ngot  %d", expectedStatus, resp.StatusCode)
 	}
 
-	obj, err := server.GetObject("other-bucket", "some/nice/object.txt")
+	obj, err := server.GetObject("other-bucket", "some/nice/object.txt", backend.NoConditions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -552,7 +553,7 @@ func TestServerClientSignedUpload(t *testing.T) {
 		t.Errorf("wrong status code\nwant %d\ngot  %d", expectedStatus, resp.StatusCode)
 	}
 
-	obj, err := server.GetObject("other-bucket", "some/nice/object.txt")
+	obj, err := server.GetObject("other-bucket", "some/nice/object.txt", backend.NoConditions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -643,7 +644,7 @@ func TestServerClientUploadWithPredefinedAclPublicRead(t *testing.T) {
 		t.Errorf("wrong status code\nwant %d\ngot  %d", expectedStatus, resp.StatusCode)
 	}
 
-	obj, err := server.GetObject("other-bucket", "some/nice/object.txt")
+	obj, err := server.GetObject("other-bucket", "some/nice/object.txt", backend.NoConditions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -900,7 +901,7 @@ func TestServerGzippedUpload(t *testing.T) {
 				t.Errorf("expected a 200 response, got: %d", resp.StatusCode)
 			}
 
-			obj, err := server.GetObject(bucketName, "testobj")
+			obj, err := server.GetObject(bucketName, "testobj", backend.NoConditions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -987,7 +988,7 @@ func TestFormDataUpload(t *testing.T) {
 		t.Errorf("wrong status code\nwant %d\ngot  %d", successActionStatus, resp.StatusCode)
 	}
 
-	obj, err := server.GetObject("other-bucket", "object.txt")
+	obj, err := server.GetObject("other-bucket", "object.txt", backend.NoConditions{})
 	if err != nil {
 		t.Fatal(err)
 	}
